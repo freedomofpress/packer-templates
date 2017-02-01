@@ -3,14 +3,15 @@ require_relative 'env'
 require_relative 'image_metadata'
 
 class ImageMetadataFetcher
-  def initialize(image_name: '', packer_builder_name: 'googlecompute',
-                 tarball_path: nil)
+  def initialize(image_name: '', infra: '', tarball_path: nil)
     @image_name = image_name
-    @packer_builder_name = packer_builder_name
+    @infra = infra
     @tarball_path = tarball_path
   end
 
   def fetch
+    return nil if image_name.to_s.empty? || infra.to_s.empty?
+
     candidate_urls.each do |url|
       if system(
         curl_exe, '-fsSL', '-o', tarball_path, url,
@@ -26,9 +27,9 @@ class ImageMetadataFetcher
     nil
   end
 
-  attr_reader :image_name, :packer_builder_name
+  attr_reader :image_name, :infra
   private :image_name
-  private :packer_builder_name
+  private :infra
 
   private def env
     @env ||= Env.new
@@ -72,10 +73,17 @@ class ImageMetadataFetcher
   end
 
   private def template_name
-    @template_name ||= "ci-#{image_name.split('-').fetch(2)}"
+    @template_name ||= "ci-#{image_name.to_s.split('-').fetch(2)}"
   end
 
   private def curl_exe
     @curl_exe ||= env.fetch('CURL_EXE', 'curl')
+  end
+
+  private def packer_builder_name
+    {
+      'gce' => 'googlecompute',
+      'docker' => 'docker',
+    }.fetch(infra)
   end
 end

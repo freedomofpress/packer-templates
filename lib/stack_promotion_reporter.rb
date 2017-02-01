@@ -19,6 +19,7 @@ class StackPromotionReporter
     @options = {
       output_dir: default_output_dir,
       dists: default_dists,
+      infras: default_infras,
       groups: default_groups
     }
 
@@ -30,10 +31,12 @@ class StackPromotionReporter
     job_board_hashes = []
 
     stacks.each do |stack|
-      groups.each do |nxt, cur, deprecated|
-        job_board_hashes += report_promotion(
-          cur, nxt, deprecated, stack
-        )
+      options[:infras].each do |infra|
+        groups.each do |nxt, cur, deprecated|
+          job_board_hashes += report_promotion(
+            cur, nxt, deprecated, stack, infra
+          )
+        end
       end
     end
 
@@ -64,6 +67,13 @@ class StackPromotionReporter
         '","-delimited ":"-separated group name triplets'
       ) do |v|
         @options[:groups] = v.strip.split(',').map(&:strip)
+      end
+
+      opts.on(
+        '-IINFRAS', '--infras=INFRAS',
+        '","-delimited infrastructure names'
+      ) do |v|
+        @options[:infras] = v.strip.split(',').map(&:strip)
       end
     end.parse!(argv)
   end
@@ -106,11 +116,15 @@ class StackPromotionReporter
   end
 
   private def default_groups
-    env.fetch('GROUPS', 'edge:stable:deprecated')
+    env.fetch('GROUPS', 'edge:stable:deprecated').split(',').map(&:strip)
+  end
+
+  private def default_infras
+    env.fetch('INFRAS', 'gce,docker').split(',').map(&:strip)
   end
 
   private def groups
-    options[:groups].split(',').map do |group_triplet|
+    options[:groups].map do |group_triplet|
       group_triplet.strip.split(':').map(&:strip)
     end
   end
@@ -124,20 +138,24 @@ class StackPromotionReporter
     ).expand_path
   end
 
-  private def report_promotion(cur, nxt, deprecated, stack)
+  private def report_promotion(cur, nxt, deprecated, stack, infra)
     promotion = StackPromotion.new(
       stack: stack,
       cur: cur,
       nxt: nxt,
-      deprecated: deprecated
+      deprecated: deprecated,
+      infra: infra
     )
-    promotion.hydrate!(output_dir: options[:output_dir].join(stack))
+    promotion.hydrate!(
+      output_dir: options[:output_dir].join(stack, infra)
+    )
     [
       promotion.cur_job_board_hash,
       promotion.nxt_job_board_hash
     ]
   rescue => e
-    logger.error "stack=#{stack} #{e}"
+    logger.error "stack=#{stack} infra=#{infra} error=#{e} " +
+                 "backtrace=#{e.backtrace.join("\n")}"
     []
   end
 

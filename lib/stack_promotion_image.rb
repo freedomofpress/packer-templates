@@ -5,18 +5,19 @@ require_relative 'env'
 require_relative 'image_metadata_fetcher'
 
 class StackPromotionImage
-  def initialize(stack: '', group: '')
+  def initialize(stack: '', group: '', infra: '')
     @stack = stack
     @group = group
+    @infra = infra
   end
 
-  attr_reader :stack, :group
+  attr_reader :stack, :group, :infra
 
   def name
     @name ||= begin
       q = URI.encode_www_form(
-        name: "^travis-ci-#{stack}.*",
-        infra: 'gce',
+        name: name_search,
+        infra: infra,
         tags: "group_#{group}:true",
         'fields[images]' => 'name'
       )
@@ -27,9 +28,17 @@ class StackPromotionImage
     end
   end
 
+  def name_search
+    {
+      'gce' => "^travis-ci-#{stack}.*",
+      'docker' => "^travisci/ci-#{stack}.*"
+    }.fetch(infra)
+  end
+
   def metadata
     @metadata ||= ImageMetadataFetcher.new(
-      image_name: name
+      image_name: name,
+      infra: infra
     ).fetch
   end
 
